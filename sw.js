@@ -1,11 +1,17 @@
-// Service worker : met l'app en cache pour qu'elle fonctionne sans connexion.
-// IMPORTANT : à chaque modification de l'app, changer le numéro de version ci-dessous
-// (ex. "balcon-ec2-v2"), sinon l'iPhone gardera l'ancienne version en cache.
-const VERSION = "balcon-ec2-v1";
+// Service worker : permet à l'app de fonctionner sans connexion.
+//
+// Stratégie "réseau d'abord" : quand on a du réseau, on charge toujours la dernière version
+// et on la met en cache ; sans réseau, on utilise la copie en cache.
+// Penser à changer VERSION à chaque modification de la liste de fichiers ou de l'app
+// (ex. "balcon-ec2-v3") : cela supprime proprement les anciennes copies.
+const VERSION = "balcon-ec2-v2";
 const FICHIERS = [
   "./",
   "index.html",
   "calcul.js",
+  "champs.js",
+  "coupe.js",
+  "dxf.js",
   "manifest.webmanifest",
   "icon-192.png",
   "icon-512.png",
@@ -27,8 +33,17 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
+  const requete = event.request;
+  if (requete.method !== "GET" || new URL(requete.url).origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(event.request).then((enCache) => enCache || fetch(event.request))
+    fetch(requete, { cache: "no-cache" })
+      .then((reponse) => {
+        if (reponse.ok) {
+          const copie = reponse.clone();
+          caches.open(VERSION).then((cache) => cache.put(requete, copie));
+        }
+        return reponse;
+      })
+      .catch(() => caches.match(requete, { ignoreSearch: true }))
   );
 });
