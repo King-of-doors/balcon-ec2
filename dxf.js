@@ -41,7 +41,7 @@ function genererDXF(g) {
     const px = -dy * hFleche * 0.17, py = dx * hFleche * 0.17;
     triangle("COTES", x, y, bx + px, by + py, bx - px, by - py);
   };
-  const etiquette = (nom, valeurM) => `${nom} = ${valeurM.toFixed(2).replace(".", ",")} m`;
+  const etiquette = (nom, valeurM) => `${nom} = ${formaterCm(valeurM)}`;
   const largeurTexte = (t) => t.length * hT * 0.6; // estimation
 
   // ---------- Cotes ----------

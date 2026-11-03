@@ -132,6 +132,15 @@
     .msg-champ { display: none; margin: -4px 0 8px; font-size: 13px; color: var(--ko); }
     .champ-bloc.invalide .msg-champ { display: block; }
 
+    /* Case à cocher « présence d'un acrotère » */
+    .case { width: 26px; height: 26px; flex: none; accent-color: var(--accent); margin: 0; }
+    /* Champs grisés (acrotère décoché) */
+    .champ-bloc.desactive .champ { opacity: .45; }
+    .saisie input:disabled {
+      opacity: 1; cursor: not-allowed;
+      -webkit-text-fill-color: var(--doux); color: var(--doux);
+    }
+
     /* ===== Sélecteurs ===== */
     .segment {
       display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
@@ -205,6 +214,25 @@
     .remplissage { height: 100%; border-radius: 6px; transition: width .25s ease; }
     .ok .grand { color: var(--ok); } .ok .remplissage { background: var(--ok); }
     .ko .grand { color: var(--ko); } .ko .remplissage { background: var(--ko); }
+    /* ===== Résultats intermédiaires ===== */
+    details.carte { padding-bottom: 10px; }
+    details.carte > summary {
+      display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none;
+      font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 4px;
+    }
+    details.carte > summary::-webkit-details-marker { display: none; }
+    details.carte > summary::after { content: "▾"; margin-left: auto; color: var(--doux); transition: transform .2s; }
+    details.carte:not([open]) > summary::after { transform: rotate(-90deg); }
+    .ligne-inter {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      padding: 7px 0; border-top: 1px solid var(--ligne);
+    }
+    .groupe h3 + .ligne-inter { border-top: 0; }
+    .li-nom { display: block; font-size: 15px; }
+    .li-formule { display: block; font-size: 12.5px; color: var(--doux); }
+    .li-val { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .li-val small { font-weight: 400; color: var(--doux); font-size: 13px; }
+    .aide-inter { font-size: 14px; color: var(--doux); margin: 8px 0; }
     .note { font-size: 12px; color: var(--doux); text-align: center; margin: 4px 12px 0; }
 
     /* ===== Barre de résumé fixe en bas ===== */
@@ -238,6 +266,11 @@
   <form id="formulaire" novalidate autocomplete="off"></form>
 
   <section class="carte" id="resultats" aria-live="polite"></section>
+
+  <details class="carte" id="inter" open>
+    <summary>Résultats intermédiaires</summary>
+    <div id="inter-contenu"></div>
+  </details>
   <p class="note">Outil d’aide au calcul : à vérifier avant toute utilisation sur un projet.</p>
 </main>
 
@@ -289,10 +322,18 @@
       </div>
     </div>`;
 
+  const blocAcrotere = `
+    <div class="champ-bloc">
+      <label class="champ" for="acrotere">
+        <span class="intitule">Présence d’un acrotère béton ?</span>
+        <input class="case" id="acrotere" type="checkbox" checked>
+      </label>
+    </div>`;
+
   let html = "";
   SECTIONS.forEach((s, i) => {
     html += `<section class="carte"><h2><span class="pastille">${i + 1}</span>${s.titre}</h2>`;
-    if (s.id === "geom") html += blocCoupe;
+    if (s.id === "geom") html += blocCoupe + blocAcrotere;
     html += s.champs.map(htmlChamp).join("") + `</section>`;
   });
 
@@ -318,21 +359,48 @@
     selectType.appendChild(option);
   });
 
+  // Valeurs par défaut (DEFAULTS est en m et kN : on les convertit en cm et daN pour l'affichage)
   Object.keys(champsParCle).forEach((cle) => {
-    document.getElementById("f-" + cle).value = virgule(DEFAULTS[cle]);
+    document.getElementById("f-" + cle).value = virgule(versAffichage(champsParCle[cle], DEFAULTS[cle]));
   });
 
+  // ---------- Case « Présence d'un acrotère béton ? » ----------
+  const caseAcrotere = document.getElementById("acrotere");
+  // Mémorise B et Hb : si on recoche la case, on retrouve les valeurs d'avant
+  const memoireAcrotere = {
+    B: document.getElementById("f-B").value,
+    Hb: document.getElementById("f-Hb").value,
+  };
+
+  function appliquerAcrotere() {
+    const coche = caseAcrotere.checked;
+    Object.values(champsParCle).filter((c) => c.dependAcrotere).forEach((champ) => {
+      const input = document.getElementById("f-" + champ.cle);
+      if (!coche) {
+        const v = lireNombre(input.value);
+        if (verifierChamp(champ, v) === null) memoireAcrotere[champ.cle] = input.value;
+        input.value = "0";
+      } else {
+        input.value = memoireAcrotere[champ.cle];
+      }
+      input.disabled = !coche;
+      input.closest(".champ-bloc").classList.toggle("desactive", !coche);
+    });
+  }
+  caseAcrotere.addEventListener("change", appliquerAcrotere);
+
   // ---------- Vue en coupe ----------
-  const derniereGeometrie = {};
+  const derniereGeometrie = {}; // en mètres
   CLES_GEOMETRIE.forEach((cle) => (derniereGeometrie[cle] = DEFAULTS[cle]));
   let champActif = null;
 
-  // Retourne la géométrie à dessiner : si un champ est vide ou invalide, on garde sa dernière valeur correcte
+  // Retourne la géométrie à dessiner (en mètres) : si un champ est vide ou invalide, on garde sa dernière valeur correcte
   function lireGeometrie() {
     let toutValide = true;
     CLES_GEOMETRIE.forEach((cle) => {
+      const champ = champsParCle[cle];
       const v = lireNombre(document.getElementById("f-" + cle).value);
-      if (verifierChamp(champsParCle[cle], v) === null) derniereGeometrie[cle] = v;
+      if (verifierChamp(champ, v) === null) derniereGeometrie[cle] = versSI(champ, v);
       else toutValide = false;
     });
     return { g: { ...derniereGeometrie }, toutValide };
@@ -404,21 +472,90 @@
     pilule.querySelector(".p-val").textContent = valeur === null ? "—" : formater(valeur, 1) + " %";
   }
 
+  // ---------- Résultats intermédiaires ----------
+  // Le calcul travaille en m et kN ; on affiche en cm et daN, comme les données saisies.
+  const nf = (x, d) => x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  function afficherIntermediaires(r, donnees) {
+    const cible = document.getElementById("inter-contenu");
+    if (!r) {
+      cible.innerHTML = `<p class="aide-inter">Disponibles dès que les données sont valides.</p>`;
+      return;
+    }
+    // chaque ligne : [nom, formule, valeur déjà formatée, unité]
+    const groupes = [
+      ["Matériaux et section", [
+        ["Résistance de calcul de l’acier fyd", "fyk / 1,15", nf(r.fyd, 1), "MPa"],
+        ["Résistance de calcul du béton fcd", "fck / 1,5", nf(r.fcd, 2), "MPa"],
+        ["Hauteur utile d", "Ha − e − ⌀/2", nf(r.d * 100, 2), "cm"],
+        ["Portée de calcul Lu", "L + min(Ha/2 ; a/2)", nf(r.L_utile * 100, 1), "cm"],
+      ]],
+      ["Charges à l’ELU", [
+        ["Poids propre de la dalle", "25 × Ha", nf(r.Gdalle * 100, 0), "daN/m²"],
+        ["Charge permanente totale G", "poids propre + charge permanente", nf(r.Gtot * 100, 0), "daN/m²"],
+        ["Charge sur la dalle Pelu", "1,35 G + 1,5 Q", nf(r.Pelu * 100, 0), "daN/ml"],
+        ["Charge de l’acrotère et du garde-corps Pacro", "1,35 (Hb · B · 25 + PGC)", nf(r.Pacro * 100, 1), "daN/ml"],
+      ]],
+      ["Moments à l’ELU (par mètre de balcon)", [
+        ["Moment dû aux charges réparties", "Pelu · Lu² / 2", nf(r.Moment_one * 100, 0), "daN.m"],
+        ["Moment dû à l’acrotère et au garde-corps", "Pacro · (Lu − B/2)", nf(r.Moment_two * 100, 0), "daN.m"],
+        ["Moment dû à la poussée sur l’acrotère", "valeur saisie", nf(donnees.Ma * 100, 0), "daN.m"],
+        ["Moment total MEd", "somme des trois moments", nf(r.Moment_tot * 100, 0), "daN.m"],
+      ]],
+      ["Flexion à l’ELU", [
+        ["Moment réduit μ", "MEd / (b · d² · fcd)", nf(r.mu, 3), ""],
+        ["Coefficient α", "1,25 (1 − √(1 − 2μ))", nf(r.alpha, 3), ""],
+        ["Bras de levier z", "d (1 − 0,4 α)", nf(r.z * 100, 2), "cm"],
+        ["Section d’acier nécessaire Ast", "MEd / (z · fyd)", nf(r.Ast, 2), "cm²/ml"],
+      ]],
+      ["Flèche à l’ELS (quasi-permanent)", [
+        ["Charge de l’acrotère et du garde-corps", "Pacro / 1,35", nf(r.pels * 100, 1), "daN/ml"],
+        ["Charge d’exploitation équivalente", "Q + Ma / (Lu² / 2)", nf(r.Q_alt * 100, 0), "daN/m²"],
+        ["Charge quasi-permanente w", "max(G + ψ2 · Q équivalente ; G)", nf(r.wels * 100, 0), "daN/m²"],
+        ["Moment quasi-permanent", "P · Lu + w · Lu² / 2", nf(r.Mqp_iso * 100, 0), "daN.m"],
+        ["Résistance moyenne en traction fctm", "0,3 · fck^(2/3)", nf(r.fctm, 2), "MPa"],
+        ["Module du béton Ecm", "22 · ((fck + 8) / 10)^0,3 · 1000", nf(r.ecm_bet, 0), "MPa"],
+        ["Module effectif (fluage) Ec,eff", "Ecm / 3", nf(r.e_bet, 0), "MPa"],
+        ["Coefficient d’équivalence αe", "200 000 / Ec,eff", nf(r.alpha_qp, 2), ""],
+        ["Position de l’axe neutre, section non fissurée", "", nf(r.xser_1 * 100, 2), "cm"],
+        ["Inertie de la section non fissurée", "", nf(r.inertie_un * 1e8, 0), "cm⁴/ml"],
+        ["Position de l’axe neutre, section fissurée", "", nf(r.xser_2 * 100, 2), "cm"],
+        ["Inertie de la section fissurée", "", nf(r.inertie_deux * 1e8, 0), "cm⁴/ml"],
+        ["Moment de fissuration Mcr", "fctm · I non fissurée / (Ha − x)", nf(r.Mcr_MN * 1e5, 0), "daN.m"],
+        ["Coefficient de répartition ζ", "0 si Mcr > M quasi-permanent, sinon 1 − (Mcr / M)²", nf(r.delta, 3), ""],
+        ["Flèche section non fissurée f1", "", nf(r.f1_iso * 1000, 2), "mm"],
+        ["Flèche section fissurée f2", "", nf(r.f2_iso * 1000, 2), "mm"],
+      ]],
+    ];
+    cible.innerHTML = groupes.map(([titre, lignes]) => `
+      <div class="groupe">
+        <h3>${titre}</h3>
+        ${lignes.map(([nom, formule, valeur, unite]) => `
+          <div class="ligne-inter">
+            <div><span class="li-nom">${nom}</span>${formule ? `<span class="li-formule">${formule}</span>` : ""}</div>
+            <span class="li-val">${valeur}${unite ? ` <small>${unite}</small>` : ""}</span>
+          </div>`).join("")}
+      </div>`).join("");
+  }
+
   function afficherErreurs(erreurs) {
     const items = erreurs.map((e) => `<li>${e.champ.libelle} : ${e.msg}</li>`).join("");
     zoneResultats.innerHTML = `<h2>Résultats</h2>
       <div class="message erreur">Données à corriger :<ul>${items}</ul></div>`;
     majPilule("pil-acier", null);
     majPilule("pil-fleche", null);
+    afficherIntermediaires(null);
   }
 
-  function afficherResultats(r) {
+  function afficherResultats(r, donnees) {
     if (!r.ok) {
       zoneResultats.innerHTML = `<h2>Résultats</h2><div class="message erreur">${r.erreur}</div>`;
       majPilule("pil-acier", null);
       majPilule("pil-fleche", null);
+      afficherIntermediaires(null);
       return;
     }
+    afficherIntermediaires(r, donnees);
     const alertes = r.avertissements.map((t) => `<div class="message alerte">${t}</div>`).join("");
     zoneResultats.innerHTML = `
       <h2>Résultats</h2>
@@ -450,7 +587,7 @@
       bloc.classList.toggle("invalide", msg !== null);
       bloc.querySelector(".msg-champ").textContent = msg ? msg.charAt(0).toUpperCase() + msg.slice(1) + "." : "";
       if (msg) erreurs.push({ champ, msg });
-      donnees[champ.cle] = valeur;
+      donnees[champ.cle] = valeur === null ? null : versSI(champ, valeur); // cm -> m, daN -> kN
     });
 
     document.getElementById("psi").textContent = "ψ2 = " + virgule(PSI2_VALUES[selectType.value]);
@@ -464,7 +601,7 @@
 
     donnees.Limite_fleche = Number(formulaire.elements["limite"].value);
     donnees.psy_deux = PSI2_VALUES[selectType.value];
-    afficherResultats(calculer(donnees));
+    afficherResultats(calculer(donnees), donnees);
   }
 
   let planifie = false;

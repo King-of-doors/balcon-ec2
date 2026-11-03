@@ -12,8 +12,9 @@ function limiter(x, min, max) {
   return Math.min(max, Math.max(min, x));
 }
 
-function formaterMetres(v) {
-  return v.toFixed(2).replace(".", ",") + " m";
+// Affiche une longueur donnée en mètres sous forme de centimètres : 0.2 -> "20 cm", 0.175 -> "17,5 cm"
+function formaterCm(v) {
+  return String(Math.round(v * 10000) / 100).replace(".", ",") + " cm";
 }
 
 // g = { A, Ha, L, B, Hb } en mètres
@@ -177,14 +178,14 @@ function dessinerCoupeSVG(g, largeur, actif) {
   const yA = Y(geo.yHaut) - 24;
   svg += cote("A",
     coteHorizontale(X(0), X(geo.A), yA, Y(geo.yHaut), Y(geo.yHaut)) +
-    etiquette("a", formaterMetres(geo.A), (X(0) + X(geo.A)) / 2, yA - 8, "middle", W));
+    etiquette("a", formaterCm(geo.A), (X(0) + X(geo.A)) / 2, yA - 8, "middle", W));
 
   // --- cote B : largeur de l'acrotère
   if (geo.avecAcrotere) {
     const yB = Y(geo.Hb) - 24;
     svg += cote("B",
       coteHorizontale(X(geo.xFin - geo.B), X(geo.xFin), yB, Y(geo.Hb), Y(geo.Hb)) +
-      etiquette("B", formaterMetres(g.B), X(geo.xFin), yB - 8, "end", W));
+      etiquette("B", formaterCm(g.B), X(geo.xFin), yB - 8, "end", W));
   }
 
   // --- cote Hb : hauteur de l'acrotère
@@ -192,7 +193,7 @@ function dessinerCoupeSVG(g, largeur, actif) {
     const xHb = X(geo.xFin) + 26;
     svg += cote("Hb",
       coteVerticale(xHb, Y(geo.Hb), Y(0), X(geo.xFin), X(geo.xFin)) +
-      etiquetteEmpilee("Hb", formaterMetres(geo.Hb), xHb + 12, (Y(geo.Hb) + Y(0)) / 2));
+      etiquetteEmpilee("Hb", formaterCm(geo.Hb), xHb + 12, (Y(geo.Hb) + Y(0)) / 2));
   }
 
   // --- cote Ha : épaisseur de la dalle (ligne qui traverse la dalle, étiquette au-dessus)
@@ -201,13 +202,13 @@ function dessinerCoupeSVG(g, largeur, actif) {
     trait(xHa, Y(0) - 26, xHa, Y(-geo.Ha) + 10) +
     trait(xHa - 5, Y(0) + 5, xHa + 5, Y(0) - 5) +
     trait(xHa - 5, Y(-geo.Ha) + 5, xHa + 5, Y(-geo.Ha) - 5) +
-    etiquette("Ha", formaterMetres(geo.Ha), xHa + 8, Y(0) - 16, "start", W));
+    etiquette("Ha", formaterCm(geo.Ha), xHa + 8, Y(0) - 16, "start", W));
 
   // --- cote L : portée du balcon (sous la dalle)
   const yL = Y(-geo.Ha) + 30;
   svg += cote("L",
     coteHorizontale(X(geo.A), X(geo.xFin), yL, Y(-geo.Ha), Y(-geo.Ha)) +
-    etiquette("L", formaterMetres(geo.L), (X(geo.A) + X(geo.xFin)) / 2, yL + 24, "middle", W));
+    etiquette("L", formaterCm(geo.L), (X(geo.A) + X(geo.xFin)) / 2, yL + 24, "middle", W));
 
   svg += "</svg>";
   return { svg, hauteur: H };
@@ -215,5 +216,5 @@ function dessinerCoupeSVG(g, largeur, actif) {
 
 // Permet de tester ce fichier avec Node.js (sans effet dans le navigateur)
 if (typeof module !== "undefined") {
-  module.exports = { geometrieCoupe, dessinerCoupeSVG, formaterMetres, limiter };
+  module.exports = { geometrieCoupe, dessinerCoupeSVG, formaterCm, limiter };
 }

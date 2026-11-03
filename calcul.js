@@ -104,6 +104,10 @@ function calculer(data) {
     mu, d, L_utile, Moment_tot,
     Ast, As, taux_utilisation,
     F_reel, F_limite, taux_fleche,
+    // ----- Résultats intermédiaires (unités internes : m, kN, MPa) -----
+    fyd, fcd, Gdalle, Gtot, Pelu, Moment_one, Pacro, Moment_two, alpha, z,
+    pels, Q_alt, wels, Mqp_iso, fctm, ecm_bet, e_bet, alpha_qp,
+    xser_1, inertie_un, xser_2, inertie_deux, Mcr_MN, Mqp_MN, delta, f1_iso, f2_iso,
   };
 
   for (const [cle, valeur] of Object.entries(resultat)) {

@@ -3,8 +3,8 @@
 // Stratégie "réseau d'abord" : quand on a du réseau, on charge toujours la dernière version
 // et on la met en cache ; sans réseau, on utilise la copie en cache.
 // Penser à changer VERSION à chaque modification de la liste de fichiers ou de l'app
-// (ex. "balcon-ec2-v3") : cela supprime proprement les anciennes copies.
-const VERSION = "balcon-ec2-v2";
+// (ex. "balcon-ec2-v4") : cela supprime proprement les anciennes copies.
+const VERSION = "balcon-ec2-v3";
 const FICHIERS = [
   "./",
   "index.html",
