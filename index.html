@@ -214,6 +214,31 @@
     .remplissage { height: 100%; border-radius: 6px; transition: width .25s ease; }
     .ok .grand { color: var(--ok); } .ok .remplissage { background: var(--ok); }
     .ko .grand { color: var(--ko); } .ko .remplissage { background: var(--ko); }
+    /* ===== Calculs enregistrés ===== */
+    #calculs { padding-bottom: 14px; }
+    .enreg { display: flex; gap: 8px; margin-top: 4px; }
+    .nom-calcul {
+      flex: 1; min-width: 0; font: inherit; font-size: 16px;
+      padding: 11px 12px; border: 1.5px solid transparent; border-radius: 12px;
+      background: var(--champ); color: var(--texte);
+      -webkit-appearance: none; appearance: none;
+    }
+    .nom-calcul:focus { outline: none; border-color: var(--accent); }
+    #msg-calculs { margin: 8px 0 0; flex: none; min-width: 0; }
+    #msg-calculs:empty { display: none; }
+    .calcul-ligne {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 0; border-top: 1px solid var(--ligne);
+    }
+    #liste-calculs { margin-top: 8px; }
+    .calcul-ligne .infos { flex: 1; min-width: 0; }
+    .calcul-ligne .nom { font-weight: 600; overflow-wrap: anywhere; }
+    .calcul-ligne .date { font-size: 12.5px; color: var(--doux); }
+    .calcul-ligne button { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 12px; border: 0; border-radius: 10px; }
+    .calcul-ligne .ouvrir { background: var(--accent-doux); color: var(--accent); }
+    .calcul-ligne .suppr { background: var(--ko-fond); color: var(--ko); }
+    .vide { font-size: 14px; color: var(--doux); margin: 6px 0 0; }
+
     /* ===== Résultats intermédiaires ===== */
     details.carte { padding-bottom: 10px; }
     details.carte > summary {
@@ -262,6 +287,17 @@
     <h1>Balcon EC2</h1>
     <p>Balcon en console · flexion (ELU) et flèche (ELS)</p>
   </header>
+
+  <section class="carte" id="calculs">
+    <h2>Mes calculs</h2>
+    <div class="enreg">
+      <input id="nom-calcul" class="nom-calcul" type="text" maxlength="60" placeholder="Nom du calcul"
+             enterkeyhint="done" autocomplete="off" aria-label="Nom du calcul">
+      <button type="button" class="btn-secondaire" id="btn-enreg">Enregistrer</button>
+    </div>
+    <p class="aide" id="msg-calculs" aria-live="polite"></p>
+    <div id="liste-calculs"></div>
+  </section>
 
   <form id="formulaire" novalidate autocomplete="off"></form>
 
@@ -633,6 +669,120 @@
     p.addEventListener("click", () => zoneResultats.scrollIntoView({ behavior: "smooth", block: "start" })));
 
   mettreAJour();
+
+  // ---------- Calculs enregistrés (sur cet appareil, dans le navigateur) ----------
+  const CLE_STOCKAGE = "balcon-ec2-calculs";
+  const champNom = document.getElementById("nom-calcul");
+  const msgCalculs = document.getElementById("msg-calculs");
+  const listeCalculs = document.getElementById("liste-calculs");
+
+  function lireCalculs() {
+    try {
+      const liste = JSON.parse(localStorage.getItem(CLE_STOCKAGE) || "[]");
+      return Array.isArray(liste) ? liste : [];
+    } catch (e) { return []; }
+  }
+  function ecrireCalculs(liste) {
+    try { localStorage.setItem(CLE_STOCKAGE, JSON.stringify(liste)); return true; }
+    catch (e) { return false; }
+  }
+  function messageCalculs(texte, erreur) {
+    msgCalculs.textContent = texte;
+    msgCalculs.classList.toggle("erreur", !!erreur);
+  }
+
+  // Photographie de tout ce que l'utilisateur a saisi
+  function capturerEtat() {
+    const valeurs = {};
+    Object.keys(champsParCle).forEach((cle) => (valeurs[cle] = document.getElementById("f-" + cle).value));
+    return {
+      valeurs,
+      acrotere: caseAcrotere.checked,
+      memoire: { ...memoireAcrotere },
+      limite: formulaire.elements["limite"].value,
+      type: selectType.value,
+    };
+  }
+
+  // Remet le formulaire dans l'état enregistré
+  function appliquerEtat(etat) {
+    Object.keys(champsParCle).forEach((cle) => {
+      if (etat.valeurs && etat.valeurs[cle] !== undefined) document.getElementById("f-" + cle).value = etat.valeurs[cle];
+    });
+    caseAcrotere.checked = !!etat.acrotere;
+    Object.assign(memoireAcrotere, etat.memoire || {});
+    Object.values(champsParCle).filter((c) => c.dependAcrotere).forEach((champ) => {
+      const input = document.getElementById("f-" + champ.cle);
+      input.disabled = !caseAcrotere.checked;
+      input.closest(".champ-bloc").classList.toggle("desactive", !caseAcrotere.checked);
+    });
+    const radio = formulaire.querySelector(`input[name="limite"][value="${etat.limite}"]`);
+    if (radio) radio.checked = true;
+    if (PSI2_VALUES[etat.type] !== undefined) selectType.value = etat.type;
+    mettreAJour();
+  }
+
+  function afficherListe() {
+    const liste = lireCalculs().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    listeCalculs.textContent = "";
+    if (liste.length === 0) {
+      const p = document.createElement("p");
+      p.className = "vide";
+      p.textContent = "Aucun calcul enregistré pour le moment.";
+      listeCalculs.appendChild(p);
+      return;
+    }
+    liste.forEach((calcul) => {
+      const ligne = document.createElement("div");
+      ligne.className = "calcul-ligne";
+      const infos = document.createElement("div");
+      infos.className = "infos";
+      const nom = document.createElement("div");
+      nom.className = "nom";
+      nom.textContent = calcul.nom;
+      const date = document.createElement("div");
+      date.className = "date";
+      date.textContent = new Date(calcul.date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+      infos.append(nom, date);
+
+      const ouvrir = document.createElement("button");
+      ouvrir.type = "button"; ouvrir.className = "ouvrir"; ouvrir.textContent = "Ouvrir";
+      ouvrir.addEventListener("click", () => {
+        appliquerEtat(calcul.etat);
+        champNom.value = calcul.nom;
+        messageCalculs("« " + calcul.nom + " » ouvert.", false);
+      });
+      const suppr = document.createElement("button");
+      suppr.type = "button"; suppr.className = "suppr"; suppr.textContent = "Supprimer";
+      suppr.addEventListener("click", () => {
+        if (!window.confirm("Supprimer le calcul « " + calcul.nom + " » ?")) return;
+        ecrireCalculs(lireCalculs().filter((c) => c.nom !== calcul.nom));
+        afficherListe();
+        messageCalculs("« " + calcul.nom + " » supprimé.", false);
+      });
+      ligne.append(infos, ouvrir, suppr);
+      listeCalculs.appendChild(ligne);
+    });
+  }
+
+  document.getElementById("btn-enreg").addEventListener("click", () => {
+    const nom = champNom.value.trim();
+    if (!nom) { messageCalculs("Donnez d’abord un nom à ce calcul.", true); champNom.focus(); return; }
+    const liste = lireCalculs();
+    const existant = liste.findIndex((c) => c.nom.toLowerCase() === nom.toLowerCase());
+    if (existant >= 0 && !window.confirm("Un calcul « " + liste[existant].nom + " » existe déjà. Le remplacer ?")) return;
+    const entree = { nom, date: new Date().toISOString(), etat: capturerEtat() };
+    if (existant >= 0) liste[existant] = entree; else liste.push(entree);
+    if (!ecrireCalculs(liste)) {
+      messageCalculs("Enregistrement impossible : le navigateur refuse le stockage (navigation privée ?).", true);
+      return;
+    }
+    afficherListe();
+    messageCalculs("« " + nom + " » enregistré.", false);
+  });
+  champNom.addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("btn-enreg").click(); });
+
+  afficherListe();
 
   // ---------- Installation / fonctionnement hors ligne ----------
   if ("serviceWorker" in navigator) {
